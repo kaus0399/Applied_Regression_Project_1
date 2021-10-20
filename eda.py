@@ -57,6 +57,13 @@ train.shape
 train['totals.transactionRevenue'] = train['totals.transactionRevenue'].astype('float')
 
 # %%
+sns.histplot(data=train, x="totals.transactionRevenue") # Histogram of original data
+# Perform a natrual log transformation
+target = np.log(train['totals.transactionRevenue'])
+sns.histplot(target) # The transformed data resemble a normal distribution
+
+
+#%%
 
 #result = train.drop(columns=['totals.bounces', 'totals.newVisits'])
 
