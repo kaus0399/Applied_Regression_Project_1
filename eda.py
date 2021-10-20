@@ -1,4 +1,5 @@
 #%%
+import collections
 import time
 import json
 import numpy as np
@@ -43,11 +44,35 @@ def load_df(csv_path, nrows = None):
     return df
 
 
-csv_train_path = '/Users/Kaustubh/Documents/UCLA Fall 2021/402 - Applied Regression /Project 1/train.csv'
-csv_test_path = '/Users/Kaustubh/Documents/UCLA Fall 2021/402 - Applied Regression /Project 1/test.csv'
+csv_train_path = '/Users/Kaustubh/Documents/UCLA Fall 2021/402 - Applied Regression /Project 1/train.csv' #Add your own path
+csv_test_path = '/Users/Kaustubh/Documents/UCLA Fall 2021/402 - Applied Regression /Project 1/test.csv' #Add your own path
 
 train = load_df(csv_train_path, nrows = 100000)
-# test = load_df(csv_test_path, nrows = 30000)
+test = load_df(csv_test_path, nrows = 30000)
 train.shape
+
+
+
+# %%
+train['totals.transactionRevenue'] = train['totals.transactionRevenue'].astype('float')
+
 # %%
 
+#result = train.drop(columns=['totals.bounces', 'totals.newVisits'])
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+
+plt.figure(figsize=(10, 8))
+
+corr_matrix = train.corr()
+corr_matrix = corr_matrix.sort_values(by=['totals.transactionRevenue'], ascending= False) 
+cmap_diverging = sns.diverging_palette(120, 20, as_cmap=True)
+
+sns.heatmap(corr_matrix,
+            xticklabels=corr_matrix.columns.values,
+            yticklabels=corr_matrix.index.values,
+            cmap = cmap_diverging,
+            annot = True)
+# %%
