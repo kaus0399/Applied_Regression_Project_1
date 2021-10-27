@@ -1,0 +1,13 @@
+---
+title: "402 - Project 1"
+output: html_document
+---
+
+
+```{r}
+data_1a = read.csv("train_s.csv")
+mod <- lm(totals.transactionRevenue ~ device.isMobile + date + device.browser + device.operatingSystem + device.deviceCategory + geoNetwork.continent + geoNetwork.subContinent +
+            geoNetwork.country + totals.hits + totals.pageviews + trafficSource.source + trafficSource.adContent, data = data_1a)
+mod2 <- step(mod, direction = "both", steps = 100000)
+```
+
