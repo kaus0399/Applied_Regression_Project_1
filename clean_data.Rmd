@@ -1,0 +1,45 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library("readxl")
+library("tidyverse")
+```
+
+```{r}
+data1 = read.csv("train_s.csv")
+gdp = read.csv("worldbank_gdp.csv")
+```
+
+
+
+
+```{r}
+gdp
+gdp_clean = gdp[!gdp$X2018..YR2018.=="..",c(1,5,6,7)]
+```
+
+```{r}
+gdp_clean$avgGDP = apply(sapply(gdp_clean[,c(-1)], as.numeric),1,mean)
+names(gdp_clean)[1] = "Country"
+gdp_clean
+```
+```{r}
+final_data = merge(x = data1, y = gdp_clean[,c(1,5)], by.x = "geoNetwork.country", by.y = "Country")
+final_data1 = subset(final_data, select = c(geoNetwork.country, fullVisitorId,channelGrouping, fullVisitorId, device.browser, device.operatingSystem, device.deviceCategory, geoNetwork.continent, geoNetwork.subContinent, geoNetwork.country, trafficSource.source, trafficSource.medium, totals.hits, totals.pageviews, totals.transactionRevenue))
+final_data2 = final_data1[!duplicated(final_data1$fullVisitorId), ]
+
+final_data2$totals.transactionRevenue[!is.na(final_data2$totals.transactionRevenue)] <- log(final_data2$totals.transactionRevenue[!is.na(final_data2$totals.transactionRevenue)])
+final_data2$totals.transactionRevenue[is.na(final_data2$totals.transactionRevenue)] <- 0
+
+
+write.csv(final_data2, "final_data.csv")
+```
+
+```{r}
+final_data2
+```
+
+
