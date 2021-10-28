@@ -27,8 +27,14 @@ names(gdp_clean)[1] = "Country"
 gdp_clean
 ```
 ```{r}
-final_data = merge(x = data1, y = gdp_clean[,c(1,5)], by.x = "geoNetwork.country", by.y = "Country")
-final_data1 = subset(final_data, select = c(geoNetwork.country, fullVisitorId,channelGrouping, fullVisitorId, device.browser, device.operatingSystem, device.deviceCategory, geoNetwork.continent, geoNetwork.subContinent, geoNetwork.country, trafficSource.source, trafficSource.medium, totals.hits, totals.pageviews, totals.transactionRevenue))
+new_data = data1[!is.na(data1$totals.transactionRevenue),]
+```
+
+
+
+```{r}
+final_data = merge(x = new_data, y = gdp_clean[,c(1,5)], by.x = "geoNetwork.country", by.y = "Country")
+final_data1 = subset(final_data, select = c(geoNetwork.country, fullVisitorId,channelGrouping, fullVisitorId, device.browser, device.operatingSystem, device.deviceCategory, geoNetwork.continent, geoNetwork.subContinent, geoNetwork.country, trafficSource.source, trafficSource.medium, totals.hits, totals.pageviews, totals.transactionRevenue, avgGDP))
 final_data2 = final_data1[!duplicated(final_data1$fullVisitorId), ]
 
 final_data2$totals.transactionRevenue[!is.na(final_data2$totals.transactionRevenue)] <- log(final_data2$totals.transactionRevenue[!is.na(final_data2$totals.transactionRevenue)])
