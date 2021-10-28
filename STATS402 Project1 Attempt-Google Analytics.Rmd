@@ -1,0 +1,125 @@
+---
+title: "STATS402 Project1 Attempt:Google Analytics"
+author: "Naiyu Niu, Kaustubh Deshpande, Jonathan Shan, Stephanie Lao"
+date: "10/19/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# EDA
+## a). Histograms of Numerical Variables
+```{r}
+library(car)
+
+train <- read.csv("final_data.csv")
+sapply(train, class)
+```
+```{r}
+hist(train$totals.transactionRevenue, 
+     main = "Histogram of Original Data", xlab = "totals.transactionRevenue")
+hist(log(train$totals.transactionRevenue), 
+     main = "Histogram of Log-Transformed Data",
+     xlab = "log of totals.transactionRevenue")
+```
+
+From the above plots, we can see that the original response variable is hard to analyze with a gigantic peak at the first bar. After we perform log-transformation, the distribution of the response variable resembles a normal distribution, where we could apply (generalized) linear models. 
+
+
+
+
+# Models
+- Full Model:
+```{r}
+full_mod <- lm(totals.transactionRevenue ~ avgGDP + factor(device.browser) + factor(device.operatingSystem) 
+               + factor(device.deviceCategory) + factor(geoNetwork.continent) + factor(geoNetwork.subContinent) 
+               + factor(geoNetwork.country) + totals.hits + totals.pageviews + factor(trafficSource.source),
+               # + date
+               # + trafficSource.adContent
+               # + device.isMobile
+               data = train)
+```
+- Model chosen by `step()` function: (the model with the least AIC)
+```{r}
+step_mod <- step(full_mod, direction = "both", steps = 100000)
+summary(step_mod)
+```
+```{r}
+plot(step_mod, which = 1)
+plot(step_mod, which = 2)
+
+residualPlots(step_mod)
+```
+
+
+- Manual selection
+```{r}
+# Only categorical variables
+cat_mod <- aov(totals.transactionRevenue ~ device.browser + device.operatingSystem 
+               + device.deviceCategory + geoNetwork.continent + geoNetwork.country 
+               + trafficSource.source,
+               data = train)
+summary(cat_mod)
+
+# Only numerical variables
+num_mod <- lm(totals.transactionRevenue ~ avgGDP + totals.hits + totals.pageviews,
+              data = train)
+summary(num_mod)
+```
+```{r}
+# see if device.deviceCategory is needed
+try1 <- aov(totals.transactionRevenue ~ device.browser + device.operatingSystem
+            + geoNetwork.continent + geoNetwork.country 
+            + trafficSource.source,
+            data = train)
+try2 <- aov(totals.transactionRevenue ~ device.browser + device.operatingSystem 
+            + device.deviceCategory + geoNetwork.continent + geoNetwork.country 
+            + trafficSource.source,
+            data = train)
+
+anova(try1, try2)
+```
+From the p-value of F-test, we fail to reject that the coefficient of device.deviceCategory is 0. 
+```{r}
+manual_mod <- lm(totals.transactionRevenue ~ avgGDP + factor(device.browser) 
+                 + factor(device.operatingSystem) + factor(geoNetwork.continent) 
+                 + factor(geoNetwork.subContinent) + factor(geoNetwork.country) 
+                 + totals.hits + totals.pageviews + factor(trafficSource.source),
+                 data = train)
+
+# check if manual_mod wil be rejected
+anova(manual_mod, step_mod)
+```
+The p-value is 0.7873>0.05. Hence, we fail to reject our manual model. 
+
+```{r}
+ncvTest(manual_mod)
+
+plot(manual_mod, which = 1)
+plot(manual_mod, which = 2)
+```
+
+
+```{r}
+par(mfrow = c(1,2))
+
+transaction_Mobile = train$totals.transactionRevenue[train$device.deviceCategory == "mobile"]
+boxplot(transaction_Mobile)
+
+transaction_notMobile = train$totals.transactionRevenue[train$device.deviceCategory != "mobile"]
+boxplot(transaction_notMobile)
+
+opar <- par()
+```
+
+```{r, eval=FALSE, echo=FALSE}
+m <- lm(totals.transactionRevenue ~ device.operatingSystem + totals.hits + totals.pageviews + trafficSource.source, data = train)
+summary(m1)
+ncvTest(m1) # rejects equal variance
+Box.test(m1$residuals) # rejects normality
+library(GeneCycle)
+fisher.g.test(m1$residuals) # fail to reject normality
+# leveneTest(m1)
+# TukeyHSD(m1)
+```
