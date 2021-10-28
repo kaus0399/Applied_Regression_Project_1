@@ -4,48 +4,93 @@ output: html_notebook
 ---
 
 ```{r}
-#install.packages('varhandle')
-#library(varhandle)
+library(car)
 ```
 
 ```{r}
 data1 = read.csv("train_s.csv")
 gdp = read.csv("worldbank_gdp.csv")
+gni = read.csv("worldbank_gni.csv")
 ```
 
 
-
-
 ```{r}
-gdp
+# Clean GDP data and calculate GDP mean over 2016-2018
 gdp_clean = gdp[!gdp$X2018..YR2018.=="..",c(1,5,6,7)]
-```
 
-```{r}
 gdp_clean$avgGDP = apply(sapply(gdp_clean[,c(-1)], as.numeric),1,mean)
 names(gdp_clean)[1] = "Country"
-gdp_clean
+```
+
+
+```{r}
+# Clean GNI data
+
+gni_clean = gni[!gni$X2018..YR2018.=="..",c(3,5)]
+gni_clean['X2017..YR2017.'] = as.numeric(unlist(gni_clean['X2017..YR2017.']))
+names(gni_clean) = c("Country","gni2017")
+```
+
+```{r}
+# Make GNI categories based on WorldBank country income classifications
+# Source: https://blogs.worldbank.org/opendata/new-country-classifications-income-level-2017-2018
+
+gni_clean <- within(gni_clean, {   
+  gni_cat <- NA 
+  gni_cat[gni2017 < 1006] <- "Low income"
+  gni_cat[gni2017 >= 1006 & gni2017 < 3956] <- "Low-Middle income"
+  gni_cat[gni2017 >= 3956 & gni2017 < 12236] <- "High-Middle income"
+  gni_cat[gni2017 >= 12236] <- "High income"
+  } 
+)
 ```
 
 
 
 
 ```{r}
+# Get rid of rows with no response variable value
+
 new_data = data1[!is.na(data1$totals.transactionRevenue),]
 ```
 
 
 ```{r}
-final_data = merge(x = new_data, y = gdp_clean[,c(1,5)], by.x = "geoNetwork.country", by.y = "Country")
-final_data1 = subset(final_data, select = c(geoNetwork.country, fullVisitorId,channelGrouping, fullVisitorId, device.browser, device.operatingSystem, device.deviceCategory, geoNetwork.continent, geoNetwork.subContinent, geoNetwork.country, trafficSource.source, trafficSource.medium, totals.hits, totals.pageviews, totals.transactionRevenue, avgGDP, date, trafficSource.adContent, device.isMobile))
+# Merge Datasets to obtain GDP and GNI data
+
+final_data0 = merge(x = new_data, y = gdp_clean[,c(1,5)], by.x = "geoNetwork.country", by.y = "Country")
+final_data = merge(x = final_data0, y = gni_clean, by.x = "geoNetwork.country", by.y = "Country")
+
+# Keep desired variables
+final_data1 = subset(final_data, select = c(geoNetwork.country, fullVisitorId,channelGrouping, fullVisitorId, device.browser, device.operatingSystem, device.deviceCategory, geoNetwork.continent, geoNetwork.subContinent, geoNetwork.country, trafficSource.source, trafficSource.medium, totals.hits, totals.pageviews,  date, trafficSource.adContent, device.isMobile, avgGDP, gni2017, gni_cat, totals.transactionRevenue))
+
+# Get rid of duplicate customers
 final_data2 = final_data1[!duplicated(final_data1$fullVisitorId), ]
+```
+
+```{r}
+# log transform the response var (as suggested by the dataset description)
+# https://www.kaggle.com/c/ga-customer-revenue-prediction/data
 
 final_data2$totals.transactionRevenue_log <- log(final_data2$totals.transactionRevenue)
+```
 
+```{r}
+# Getting rid of small groups in categorical variables
+
+final_data2$device.browser <- recode(final_data2$device.browser, "'Chrome'='Chrome'; 'Safari'='Safari'; 'Safari (in-app)'='Safari'; else='Other'")
+final_data2$device.operatingSystem <- recode(final_data2$device.operatingSystem, "'Windows Phone'='Windows'; 'Macintosh'='iOS'")
+final_data2$geoNetwork.country <- recode(final_data2$geoNetwork.country, "'United States'='United States'; 'Canada'='Canada'; else='Other'")
+final_data2$trafficSource.source <- recode(final_data2$trafficSource.source, "'(direct)'='(direct)'; 'google'='google'; 'mall.googleplex.com' = 'mall.googleplex.com'; else='Other'")
+```
+
+```{r}
 write.csv(final_data2, "final_data.csv")
 ```
 
 ```{r}
 final_data2
 ```
+
+
 
