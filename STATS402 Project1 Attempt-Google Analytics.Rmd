@@ -115,11 +115,70 @@ opar <- par()
 
 ```{r, eval=FALSE, echo=FALSE}
 m <- lm(totals.transactionRevenue ~ device.operatingSystem + totals.hits + totals.pageviews + trafficSource.source, data = train)
-summary(m1)
-ncvTest(m1) # rejects equal variance
-Box.test(m1$residuals) # rejects normality
+
+summary(m)
+ncvTest(m) # rejects equal variance, heteroskedasticity present
+Box.test(m$residuals) # rejects normality
 library(GeneCycle)
-fisher.g.test(m1$residuals) # fail to reject normality
-# leveneTest(m1)
-# TukeyHSD(m1)
+fisher.g.test(m$residuals) # fail to reject normality
+# leveneTest(m)
+#TukeyHSD(m)
 ```
+
+
+```{r}
+#Let's find the Robust standard errors
+library(lmtest)
+library(sandwich)
+summary(step_mod)
+coeftest(step_mod, vcov = vcovHC(step_mod, "HC1"))
+```
+
+
+
+Robust standard errors are much lower than the standard errors. This can be attributed to small sample size of positive transaction data points.
+Regressing using these robust standard errors will solve the issue of computing incorrect interval estimates or incorrect values for our test statistics. However, we still have another issue from heteroskedasticity, that the regular OLS estimators no longer being best. If we had a large enough sample size the variance of the estimators may still be small enough to get precise estimates. However, since our sample size is relatively small the variance is much larger and we need to conduct some further analysis. Let's try using weighted least squares. 
+
+
+```{r}
+#Let's try weighted least squares
+resids <- step_mod$residuals
+varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) +
+     factor(device.deviceCategory) + totals.pageviews + factor(trafficSource.source), data = train)
+
+weightz <- 1/((varfunc.step_mod$fitted.values)^2)
+
+step_mod.wls = lm(totals.transactionRevenue~factor(device.operatingSystem) +
+   factor(device.deviceCategory) + totals.pageviews + factor(trafficSource.source), weights = weightz, data = train)
+
+
+summary(step_mod.wls)
+# 
+par(mfrow=c(1,2))
+plot(step_mod, which = 1)
+plot(step_mod.wls, which = 1)
+
+par(mfrow=c(1,2))
+plot(step_mod, which = 2)
+plot(step_mod.wls, which = 2)
+
+residualPlots(step_mod)
+residualPlots(step_mod.wls)
+```
+
+```{r}
+
+summary(step_mod)$r.squared
+summary(step_mod.wls)$r.squared
+
+# improvement of 0.30 or 600% 
+
+
+# library(forecast)
+# cor(residuals(step_mod)[-1], residuals(step_mod)[-length(residuals(step_mod))])
+# checkresiduals(step_mod)
+# 
+# cor(residuals(step_mod.wls)[-1], residuals(step_mod)[-length(residuals(step_mod.wls))])
+# checkresiduals(step_mod.wls)
+```
+
