@@ -4,6 +4,7 @@ output: html_notebook
 ---
 
 ```{r}
+library(tidyverse)
 library(car)
 ```
 
@@ -50,8 +51,10 @@ gni_clean <- within(gni_clean, {
 
 ```{r}
 # Get rid of rows with no response variable value
+t = data1 %>% group_by(fullVisitorId) %>% summarize(summedRevenue = sum(totals.transactionRevenue, na.rm = TRUE))
+new_data0 = data1[!is.na(data1$totals.transactionRevenue),]
 
-new_data = data1[!is.na(data1$totals.transactionRevenue),]
+new_data = merge(t, new_data0, by = "fullVisitorId")
 ```
 
 
@@ -62,7 +65,7 @@ final_data0 = merge(x = new_data, y = gdp_clean[,c(1,5)], by.x = "geoNetwork.cou
 final_data = merge(x = final_data0, y = gni_clean, by.x = "geoNetwork.country", by.y = "Country")
 
 # Keep desired variables
-final_data1 = subset(final_data, select = c(geoNetwork.country, fullVisitorId,channelGrouping, fullVisitorId, device.browser, device.operatingSystem, device.deviceCategory, geoNetwork.continent, geoNetwork.subContinent, geoNetwork.country, trafficSource.source, trafficSource.medium, totals.hits, totals.pageviews,  date, trafficSource.adContent, device.isMobile, avgGDP, gni2017, gni_cat, totals.transactionRevenue))
+final_data1 = subset(final_data, select = c(geoNetwork.country, fullVisitorId,channelGrouping, fullVisitorId, device.browser, device.operatingSystem, device.deviceCategory, geoNetwork.continent, geoNetwork.subContinent, geoNetwork.country, trafficSource.source, trafficSource.medium, totals.hits, totals.pageviews,  date, trafficSource.adContent, device.isMobile, avgGDP, gni2017, gni_cat, totals.transactionRevenue, summedRevenue))
 
 # Get rid of duplicate customers
 final_data2 = final_data1[!duplicated(final_data1$fullVisitorId), ]
@@ -71,17 +74,16 @@ final_data2 = final_data1[!duplicated(final_data1$fullVisitorId), ]
 ```{r}
 # log transform the response var (as suggested by the dataset description)
 # https://www.kaggle.com/c/ga-customer-revenue-prediction/data
-
+final_data2$summedRevenue_log <- log(final_data2$summedRevenue)
 final_data2$totals.transactionRevenue_log <- log(final_data2$totals.transactionRevenue)
 ```
 
 ```{r}
 # Getting rid of small groups in categorical variables
-
-final_data2$device.browser <- recode(final_data2$device.browser, "'Chrome'='Chrome'; 'Safari'='Safari'; 'Safari (in-app)'='Safari'; else='Other'")
-final_data2$device.operatingSystem <- recode(final_data2$device.operatingSystem, "'Windows Phone'='Windows'; 'Macintosh'='iOS'")
-final_data2$geoNetwork.country <- recode(final_data2$geoNetwork.country, "'United States'='United States'; 'Canada'='Canada'; else='Other'")
-final_data2$trafficSource.source <- recode(final_data2$trafficSource.source, "'(direct)'='(direct)'; 'google'='google'; 'mall.googleplex.com' = 'mall.googleplex.com'; else='Other'")
+final_data2$device.browser <- recode(var = final_data2$device.browser, recodes = "'Chrome'='Chrome'; 'Safari'='Safari'; 'Safari (in-app)'='Safari'; else='Other'")
+final_data2$device.operatingSystem <- recode(final_data2$device.operatingSystem, recode ="'Windows Phone'='Windows'; 'Macintosh'='iOS'")
+final_data2$geoNetwork.country <- recode(final_data2$geoNetwork.country, recodes ="'United States'='United States'; 'Canada'='Canada'; else='Other'")
+final_data2$trafficSource.source <- recode(final_data2$trafficSource.source, recodes ="'(direct)'='(direct)'; 'google'='google'; 'mall.googleplex.com' = 'mall.googleplex.com'; else='Other'")
 ```
 
 ```{r}
