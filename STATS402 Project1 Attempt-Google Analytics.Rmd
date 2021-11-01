@@ -13,15 +13,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(car)
 
-train <- read.csv("final_data.csv")
+data <- read.csv("final_data.csv")
+dt = sort(sample(nrow(data), nrow(data)*.70))
+train<-data[dt,]
+test<-data[-dt,]
 sapply(train, class)
 ```
 ```{r}
-hist(train$totals.transactionRevenue, 
-     main = "Histogram of Original Data", xlab = "totals.transactionRevenue")
-hist(log(train$totals.transactionRevenue), 
+hist(train$summedRevenue, 
+     main = "Histogram of Original Data", xlab = "summedRevenue_log")
+
+hist(log(train$summedRevenue_log), 
      main = "Histogram of Log-Transformed Data",
-     xlab = "log of totals.transactionRevenue")
+     xlab = "log of summedRevenue_log")
 ```
 
 From the above plots, we can see that the original response variable is hard to analyze with a gigantic peak at the first bar. After we perform log-transformation, the distribution of the response variable resembles a normal distribution, where we could apply (generalized) linear models. 
@@ -32,7 +36,7 @@ From the above plots, we can see that the original response variable is hard to 
 # Models
 - Full Model:
 ```{r}
-full_mod <- lm(totals.transactionRevenue ~ avgGDP + factor(device.browser) + factor(device.operatingSystem) 
+full_mod <- lm(summedRevenue_log ~ avgGDP + factor(device.browser) + factor(device.operatingSystem) 
                + factor(device.deviceCategory) + factor(geoNetwork.continent) + factor(geoNetwork.subContinent) 
                + factor(geoNetwork.country) + totals.hits + totals.pageviews + factor(trafficSource.source),
                # + date
@@ -56,33 +60,37 @@ residualPlots(step_mod)
 - Manual selection
 ```{r}
 # Only categorical variables
-cat_mod <- aov(totals.transactionRevenue ~ device.browser + device.operatingSystem 
+cat_mod <- aov(summedRevenue_log ~ device.browser + device.operatingSystem 
                + device.deviceCategory + geoNetwork.continent + geoNetwork.country 
                + trafficSource.source,
                data = train)
 summary(cat_mod)
 
 # Only numerical variables
-num_mod <- lm(totals.transactionRevenue ~ avgGDP + totals.hits + totals.pageviews,
+num_mod <- lm(summedRevenue_log ~ avgGDP + totals.hits + totals.pageviews,
               data = train)
 summary(num_mod)
 ```
 ```{r}
 # see if device.deviceCategory is needed
-try1 <- aov(totals.transactionRevenue ~ device.browser + device.operatingSystem
+try1 <- aov(summedRevenue_log ~ device.browser + device.operatingSystem
             + geoNetwork.continent + geoNetwork.country 
             + trafficSource.source,
             data = train)
-try2 <- aov(totals.transactionRevenue ~ device.browser + device.operatingSystem 
+try2 <- aov(summedRevenue_log ~ device.browser + device.operatingSystem 
             + device.deviceCategory + geoNetwork.continent + geoNetwork.country 
             + trafficSource.source,
             data = train)
 
 anova(try1, try2)
 ```
-From the p-value of F-test, we fail to reject that the coefficient of device.deviceCategory is 0. 
+
+
+From the p-value of F-test, we reject that the coefficient of device.deviceCategory is 0. 
+
+
 ```{r}
-manual_mod <- lm(totals.transactionRevenue ~ avgGDP + factor(device.browser) 
+manual_mod <- lm(summedRevenue_log ~ avgGDP + factor(device.browser) 
                  + factor(device.operatingSystem) + factor(geoNetwork.continent) 
                  + factor(geoNetwork.subContinent) + factor(geoNetwork.country) 
                  + totals.hits + totals.pageviews + factor(trafficSource.source),
@@ -104,17 +112,17 @@ plot(manual_mod, which = 2)
 ```{r}
 par(mfrow = c(1,2))
 
-transaction_Mobile = train$totals.transactionRevenue[train$device.deviceCategory == "mobile"]
+transaction_Mobile = train$summedRevenue_log[train$device.deviceCategory == "mobile"]
 boxplot(transaction_Mobile)
 
-transaction_notMobile = train$totals.transactionRevenue[train$device.deviceCategory != "mobile"]
+transaction_notMobile = train$summedRevenue_log[train$device.deviceCategory != "mobile"]
 boxplot(transaction_notMobile)
 
 opar <- par()
 ```
 
 ```{r, eval=FALSE, echo=FALSE}
-m <- lm(totals.transactionRevenue ~ device.operatingSystem + totals.hits + totals.pageviews + trafficSource.source, data = train)
+m <- lm(summedRevenue_log ~ device.operatingSystem + totals.hits + totals.pageviews + trafficSource.source, data = train)
 
 summary(m)
 ncvTest(m) # rejects equal variance, heteroskedasticity present
@@ -142,14 +150,15 @@ Regressing using these robust standard errors will solve the issue of computing 
 
 ```{r}
 #Let's try weighted least squares
+library(MASS)
 resids <- step_mod$residuals
-varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) +
-     factor(device.deviceCategory) + totals.pageviews + factor(trafficSource.source), data = train)
+varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+    totals.hits, data = train)
 
 weightz <- 1/((varfunc.step_mod$fitted.values)^2)
 
-step_mod.wls = lm(totals.transactionRevenue~factor(device.operatingSystem) +
-   factor(device.deviceCategory) + totals.pageviews + factor(trafficSource.source), weights = weightz, data = train)
+step_mod.wls = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+    totals.hits, weights = weightz, data = train)
 
 
 summary(step_mod.wls)
@@ -174,11 +183,110 @@ summary(step_mod.wls)$r.squared
 # improvement of 0.30 or 600% 
 
 
+y_hat <- predict(step_mod.wls,newdata = test)
+residuals <- (test$summedRevenue_log - y_hat)
+# 
+RMSE <- sqrt(mean(residuals^2))
+RMSE
+
 # library(forecast)
 # cor(residuals(step_mod)[-1], residuals(step_mod)[-length(residuals(step_mod))])
 # checkresiduals(step_mod)
 # 
 # cor(residuals(step_mod.wls)[-1], residuals(step_mod)[-length(residuals(step_mod.wls))])
 # checkresiduals(step_mod.wls)
+```
+```{r}
+
+
+error_model_step <- rep(NA, 100)
+error_model_step_wls <- rep(NA, 100)
+
+for(i in 1:100){
+   
+   dt = sort(sample(nrow(data), nrow(data)*.75))
+   train<-data[dt,]
+   test<-data[-dt,]
+   
+   step_mod = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+   totals.hits, data = train)
+   
+   y_hat <- predict(step_mod,newdata = test)
+   residuals <- (test$summedRevenue_log - y_hat)
+   error_model_step[i] <- sqrt(mean(residuals^2))
+   
+   
+   resids <- step_mod$residuals
+   varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+   totals.hits, data = train)
+
+   
+   weightz <- 1/((varfunc.step_mod$fitted.values)^2)
+   
+
+   step_mod.wls = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+   totals.hits, weights = weightz, data = train)
+   
+   
+   y_hat <- predict(step_mod.wls,newdata = test)
+   residuals <- (test$summedRevenue_log - y_hat)
+   error_model_step_wls[i] <- sqrt(mean(residuals^2))
+  
+}
+
+mean(error_model_step)
+mean(error_model_step_wls)
+```
+
+
+
+
+
+
+
+```{r}
+
+# create vectors to store the validation errors for each model
+# error_model1 <- rep(NA, 53)
+# ...
+error_model_step <- rep(NA, 1335)
+error_model_step_wls <- rep(NA, 1335)
+
+for(i in 1:1335){
+  
+  # write a line to select the ith line in the data
+  # store this line as the 'test' case
+  test <- data[i,]
+  # store the remaining as the 'training' data
+  train <- data[-c(i),]
+  
+  step_mod = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+   totals.hits, data = train)
+  
+  y_hat <- predict(step_mod,newdata = test)
+  residuals <- (test$summedRevenue_log - y_hat)
+  error_model_step[i] <- sqrt(mean(residuals^2))
+  
+  resids <- step_mod$residuals
+  varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+   totals.hits, data = train)
+  
+  weightz <- 1/((varfunc.step_mod$fitted.values)^2)
+  
+  step_mod.wls = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
+   totals.hits, weights = weightz, data = train)
+  
+  y_hat <- predict(step_mod.wls,newdata = test)
+  residuals <- (test$summedRevenue_log - y_hat)
+  error_model_step_wls[i] <- sqrt(mean(residuals^2))
+  
+ 
+}
+
+
+# once all of the errors have been calculated, find the mean squared error
+# ...
+mean(error_model_step)
+mean(error_model_step_wls)
 ```
 
