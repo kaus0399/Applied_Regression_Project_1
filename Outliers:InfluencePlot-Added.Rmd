@@ -1,0 +1,322 @@
+---
+title: "STATS402 Project1 Attempt:Google Analytics"
+author: "Naiyu Niu, Kaustubh Deshpande, Jonathan Shan, Stephanie Lao"
+date: "10/19/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# EDA
+## a). Histograms of Numerical Variables
+```{r}
+library(car)
+
+data <- read.csv("final_data.csv")
+dt = sort(sample(nrow(data), nrow(data)*.70))
+train<-data[dt,]
+test<-data[-dt,]
+sapply(train, class)
+```
+```{r}
+hist(train$summedRevenue, 
+     main = "Histogram of Original Data", xlab = "summedRevenue_log")
+
+hist(log(train$summedRevenue_log), 
+     main = "Histogram of Log-Transformed Data",
+     xlab = "log of summedRevenue_log")
+```
+
+From the above plots, we can see that the original response variable is hard to analyze with a gigantic peak at the first bar. After we perform log-transformation, the distribution of the response variable resembles a normal distribution, where we could apply (generalized) linear models. 
+
+
+
+
+# Models
+- Full Model:
+```{r}
+full_mod <- lm(summedRevenue_log ~ avgGDP + factor(device.browser) + factor(device.operatingSystem) 
+               + factor(device.deviceCategory) + factor(geoNetwork.continent) + factor(geoNetwork.subContinent) 
+               + factor(geoNetwork.country) + totals.hits + totals.pageviews + factor(trafficSource.source),
+               # + date
+               # + trafficSource.adContent
+               # + device.isMobile
+               data = train)
+```
+- Model chosen by `step()` function: (the model with the least AIC)
+```{r}
+step_mod <- step(full_mod, direction = "both", steps = 100000)
+summary(step_mod)
+```
+```{r}
+plot(step_mod, which = 1)
+plot(step_mod, which = 2)
+
+residualPlots(step_mod)
+```
+
+
+- Manual selection
+```{r}
+# Only categorical variables
+cat_mod <- aov(summedRevenue_log ~ device.browser + device.operatingSystem 
+               + device.deviceCategory + geoNetwork.continent + geoNetwork.country 
+               + trafficSource.source,
+               data = train)
+summary(cat_mod)
+
+# Only numerical variables
+num_mod <- lm(summedRevenue_log ~ avgGDP + totals.hits + totals.pageviews,
+              data = train)
+summary(num_mod)
+```
+```{r}
+# see if device.deviceCategory is needed
+try1 <- aov(summedRevenue_log ~ device.browser + device.operatingSystem
+            + geoNetwork.continent + geoNetwork.country 
+            + trafficSource.source,
+            data = train)
+try2 <- aov(summedRevenue_log ~ device.browser + device.operatingSystem 
+            + device.deviceCategory + geoNetwork.continent + geoNetwork.country 
+            + trafficSource.source,
+            data = train)
+
+anova(try1, try2)
+```
+From the p-value of F-test, we reject that the coefficient of device.deviceCategory is 0. 
+
+
+```{r}
+manual_mod <- lm(summedRevenue_log ~ avgGDP + factor(device.deviceCategory) 
+                 + factor(device.operatingSystem) + factor(geoNetwork.continent) 
+                 + factor(geoNetwork.subContinent) + factor(geoNetwork.country) 
+                 + totals.hits + totals.pageviews + factor(trafficSource.source)
+                 + factor(device.browser), data = train)
+
+# check if step_mod wil be rejected
+anova(step_mod, manual_mod)
+```
+The p-value is 0.6768>0.05. Hence, we fail to reject our step model. Therefore, the extra terms in the manually selected model are not necessary. 
+
+```{r}
+par(mfrow = c(1,2))
+
+transaction_Mobile = train$summedRevenue_log[train$device.deviceCategory == "mobile"]
+boxplot(transaction_Mobile)
+
+transaction_notMobile = train$summedRevenue_log[train$device.deviceCategory != "mobile"]
+boxplot(transaction_notMobile)
+
+opar <- par()
+```
+
+From the plots, we can see that the mean of transactions of customers using mobile is around 17, while the mean of transactions of customers not using mobile is around 18. 
+
+```{r}
+ncvTest(step_mod) # rejects equal variance, heteroskedasticity present
+
+Box.test(step_mod$residuals) # fail to reject normality
+
+library(GeneCycle)
+fisher.g.test(step_mod$residuals) # fail to reject normality
+
+# leveneTest()
+# TukeyHSD()
+```
+
+
+```{r}
+#Let's find the Robust standard errors
+library(lmtest)
+library(sandwich)
+library(zoo)
+summary(step_mod)
+coeftest(step_mod, vcov = vcovHC(step_mod, "HC1"))
+```
+
+
+
+Robust standard errors are much lower than the standard errors. This can be attributed to small sample size of positive transaction data points.
+Regressing using these robust standard errors will solve the issue of computing incorrect interval estimates or incorrect values for our test statistics. However, we still have another issue from heteroskedasticity, that the regular OLS estimators no longer being best. If we had a large enough sample size the variance of the estimators may still be small enough to get precise estimates. However, since our sample size is relatively small the variance is much larger and we need to conduct some further analysis. Let's try using weighted least squares. 
+
+
+```{r}
+#Let's try weighted least squares
+library(MASS)
+resids <- step_mod$residuals
+
+varfunc.step_mod <- lm(abs(resids) ~ factor(device.operatingSystem) 
+                       + factor(device.deviceCategory) + totals.hits 
+                       + factor(trafficSource.source), 
+                       data = train)
+
+weightz <- 1/((varfunc.step_mod$fitted.values)^2)
+
+step_mod.wls = lm(summedRevenue_log ~ factor(device.operatingSystem) 
+                  + factor(device.deviceCategory) + totals.hits
+                  + factor(trafficSource.source), 
+                  weights = weightz, data = train)
+
+summary(step_mod.wls)
+
+# 
+par(mfrow=c(1,2))
+plot(step_mod, which = 1)
+plot(step_mod.wls, which = 1)
+
+par(mfrow=c(1,2))
+plot(step_mod, which = 2)
+plot(step_mod.wls, which = 2)
+
+residualPlots(step_mod)
+residualPlots(step_mod.wls)
+```
+
+```{r}
+
+cat("The unweighted step model has R^2:", summary(step_mod)$r.squared, "\n")
+cat("The weighted step model has R^2:", summary(step_mod.wls)$r.squared, "\n")
+
+# improvement of 0.30 or 600% 
+
+y_hat <- predict(step_mod.wls, newdata = test)
+residuals <- (test$summedRevenue_log - y_hat)
+# 
+RMSE <- sqrt(mean(residuals^2))
+RMSE
+
+# library(forecast)
+# cor(residuals(step_mod)[-1], residuals(step_mod)[-length(residuals(step_mod))])
+# checkresiduals(step_mod)
+# 
+# cor(residuals(step_mod.wls)[-1], residuals(step_mod)[-length(residuals(step_mod.wls))])
+# checkresiduals(step_mod.wls)
+```
+As the result shows, the weighted step model gives higher $R^2$. 
+
+```{r}
+error_model_step <- rep(NA, 100)
+error_model_step_wls <- rep(NA, 100)
+
+for(i in 1:100){
+   
+   dt = sort(sample(nrow(data), nrow(data)*.75))
+   train<-data[dt,]
+   test<-data[-dt,]
+   
+   step_mod = lm(summedRevenue_log ~ factor(device.operatingSystem) 
+                 + factor(device.deviceCategory) + totals.hits
+                 + factor(trafficSource.source), 
+                 data = train)
+   
+   y_hat <- predict(step_mod,newdata = test)
+   residuals <- (test$summedRevenue_log - y_hat)
+   error_model_step[i] <- sqrt(mean(residuals^2))
+   
+   resids <- step_mod$residuals
+   varfunc.step_mod <- lm(abs(resids) ~ factor(device.operatingSystem) 
+                          + factor(device.deviceCategory) + totals.hits
+                          + factor(trafficSource.source),
+                          data = train)
+   
+   weightz <- 1/((varfunc.step_mod$fitted.values)^2)
+
+   step_mod.wls = lm(summedRevenue_log ~ factor(device.operatingSystem) 
+                     + factor(device.deviceCategory) + totals.hits
+                     + factor(trafficSource.source), 
+                     weights = weightz, data = train)
+   
+   y_hat <- predict(step_mod.wls,newdata = test)
+   residuals <- (test$summedRevenue_log - y_hat)
+   error_model_step_wls[i] <- sqrt(mean(residuals^2))
+  
+}
+
+mean(error_model_step)
+mean(error_model_step_wls)
+```
+
+
+
+
+
+
+
+```{r}
+
+# create vectors to store the validation errors for each model
+# error_model1 <- rep(NA, 53)
+# ...
+error_model_step <- rep(NA, 1335)
+error_model_step_wls <- rep(NA, 1335)
+
+for(i in 1:1335){
+  
+  # write a line to select the ith line in the data
+  # store this line as the 'test' case
+  test <- data[i,]
+  # store the remaining as the 'training' data
+  train <- data[-c(i),]
+
+  step_mod = lm(summedRevenue_log ~ factor(device.operatingSystem) + factor(device.deviceCategory) 
+                + totals.hits + factor(trafficSource.source), data = train)
+  
+  y_hat <- predict(step_mod,newdata = test)
+  residuals <- (test$summedRevenue_log - y_hat)
+  error_model_step[i] <- sqrt(mean(residuals^2))
+  
+  resids <- step_mod$residuals
+  varfunc.step_mod <- lm(abs(resids) ~ factor(device.operatingSystem) + factor(device.deviceCategory) 
+                         + totals.hits + factor(trafficSource.source), data = train)
+  
+  weightz <- 1/((varfunc.step_mod$fitted.values)^2)
+  
+  step_mod.wls = lm(summedRevenue_log ~ factor(device.operatingSystem) + factor(device.deviceCategory) 
+                    + totals.hits + factor(trafficSource.source), 
+                    weights = weightz, data = train)
+  
+  y_hat <- predict(step_mod.wls,newdata = test)
+  residuals <- (test$summedRevenue_log - y_hat)
+  error_model_step_wls[i] <- sqrt(mean(residuals^2))
+  
+ 
+}
+
+
+# once all of the errors have been calculated, find the mean squared error
+# ...
+mean(error_model_step)
+mean(error_model_step_wls)
+```
+
+# Outlier Test
+```{r}
+outlierTest(step_mod.wls)
+```
+Here, the Bonferroni adjusted p-value is $0.40191>0.05$, not statistically significant. \
+The largest studentized residual is as large as -3.623833. \
+This means we do not have any significant outliers.
+
+```{r}
+par(mfrow = c(1,2))
+plot(step_mod.wls, which = 4)
+plot(step_mod.wls, which = 5)
+```
+
+The plot of standardized residuals vs. leverage does not show any major outliers. Only observations 226, 551, 557 has a Z-value close to -3.6. But some observations in a large data set does not have much effect. \
+
+
+# Influence Plot
+```{r}
+# 4/N
+cat("Any value larger than ", 4/1334, " is considered an outlier.", "\n")
+influencePlot(step_mod.wls)
+```
+
+According to the threshold $\frac{4}{N}\approx 0.002998501$, data points 226 and 551 could be considered as outliers. \
+From the Studentized Residuals ~ Hat-Values plot, we can determine that only point 226 has both high cook's distance and high studentized residual ($<-2$). \
+In this case, we only have one outlier, which is data point 226. 
+
+
+
