@@ -2,7 +2,9 @@
 title: "STATS402 Project1 Attempt:Google Analytics"
 author: "Naiyu Niu, Kaustubh Deshpande, Jonathan Shan, Stephanie Lao"
 date: "10/19/2021"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -34,20 +36,24 @@ From the above plots, we can see that the original response variable is hard to 
 
 
 # Models
-- Full Model:
+## a). Full Model
 ```{r}
 full_mod <- lm(summedRevenue_log ~ avgGDP + factor(device.browser) + factor(device.operatingSystem) 
                + factor(device.deviceCategory) + factor(geoNetwork.continent) + factor(geoNetwork.subContinent) 
                + factor(geoNetwork.country) + totals.hits + totals.pageviews + factor(trafficSource.source),
-               # + date
-               # + trafficSource.adContent
-               # + device.isMobile
                data = train)
+
+summary(full_mod)
+
 ```
-- Model chosen by `step()` function: (the model with the least AIC)
+
+
+## b). Step Model
+- Next we will obtain our Step Model which is chosen by R's `step()` function. This is the model with the least AIC.
+
 ```{r}
-step_mod <- step(full_mod, direction = "both", steps = 100000)
-summary(step_mod)
+set.seed(1)
+step_mod <- step(full_mod, direction = "both")
 ```
 ```{r}
 plot(step_mod, which = 1)
@@ -57,7 +63,9 @@ residualPlots(step_mod)
 ```
 
 
-- Manual selection
+## c). Manual Model
+- Next we will attempt a manual implementations of models by intuitively handpicking the variables. 
+
 ```{r}
 # Only categorical variables
 cat_mod <- aov(summedRevenue_log ~ device.browser + device.operatingSystem 
@@ -69,8 +77,11 @@ summary(cat_mod)
 # Only numerical variables
 num_mod <- lm(summedRevenue_log ~ avgGDP + totals.hits + totals.pageviews,
               data = train)
+
 summary(num_mod)
 ```
+
+
 ```{r}
 # see if device.deviceCategory is needed
 try1 <- aov(summedRevenue_log ~ device.browser + device.operatingSystem
@@ -86,7 +97,7 @@ anova(try1, try2)
 ```
 
 
-From the p-value of F-test, we reject that the coefficient of device.deviceCategory is 0. 
+The result shows a non-significant result (p = 0.0859). Thus, we should reject model 2 and stick with model 1 which does not include device.deviceCategory
 
 
 ```{r}
@@ -97,41 +108,20 @@ manual_mod <- lm(summedRevenue_log ~ avgGDP + factor(device.browser)
                  data = train)
 
 # check if manual_mod wil be rejected
-anova(manual_mod, step_mod)
+anova(step_mod, manual_mod)
 ```
-The p-value is 0.7873>0.05. Hence, we fail to reject our manual model. 
+
+The result shows a non-significant result (p = 0.7531). Thus, we should reject the manual model and stick with our step model as **including the additional variables did not improve our fit**
+
+
+## c). Weighted Least Squares Step Model
+Since the step model has outperformed the manual model. It is currently our best. Let us analyze this model further. 
 
 ```{r}
-ncvTest(manual_mod)
-
-plot(manual_mod, which = 1)
-plot(manual_mod, which = 2)
+plot(step_mod)
 ```
 
-
-```{r}
-par(mfrow = c(1,2))
-
-transaction_Mobile = train$summedRevenue_log[train$device.deviceCategory == "mobile"]
-boxplot(transaction_Mobile)
-
-transaction_notMobile = train$summedRevenue_log[train$device.deviceCategory != "mobile"]
-boxplot(transaction_notMobile)
-
-opar <- par()
-```
-
-```{r, eval=FALSE, echo=FALSE}
-m <- lm(summedRevenue_log ~ device.operatingSystem + totals.hits + totals.pageviews + trafficSource.source, data = train)
-
-summary(m)
-ncvTest(m) # rejects equal variance, heteroskedasticity present
-Box.test(m$residuals) # rejects normality
-library(GeneCycle)
-fisher.g.test(m$residuals) # fail to reject normality
-# leveneTest(m)
-#TukeyHSD(m)
-```
+There may be slight heteroskedasticity present. Let's try and diagnose this
 
 
 ```{r}
@@ -143,7 +133,6 @@ coeftest(step_mod, vcov = vcovHC(step_mod, "HC1"))
 ```
 
 
-
 Robust standard errors are much lower than the standard errors. This can be attributed to small sample size of positive transaction data points.
 Regressing using these robust standard errors will solve the issue of computing incorrect interval estimates or incorrect values for our test statistics. However, we still have another issue from heteroskedasticity, that the regular OLS estimators no longer being best. If we had a large enough sample size the variance of the estimators may still be small enough to get precise estimates. However, since our sample size is relatively small the variance is much larger and we need to conduct some further analysis. Let's try using weighted least squares. 
 
@@ -152,13 +141,13 @@ Regressing using these robust standard errors will solve the issue of computing 
 #Let's try weighted least squares
 library(MASS)
 resids <- step_mod$residuals
-varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-    totals.hits, data = train)
+varfunc.step_mod <- lm(abs(resids)~factor(device.browser) + factor(device.operatingSystem) + 
+   + totals.hits, data = train)
 
 weightz <- 1/((varfunc.step_mod$fitted.values)^2)
 
-step_mod.wls = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-    totals.hits, weights = weightz, data = train)
+step_mod.wls = lm(summedRevenue_log~factor(device.browser) + factor(device.operatingSystem) + 
+    factor(device.deviceCategory) + totals.hits + factor(trafficSource.source), weights = weightz, data = train)
 
 
 summary(step_mod.wls)
@@ -180,36 +169,43 @@ residualPlots(step_mod.wls)
 summary(step_mod)$r.squared
 summary(step_mod.wls)$r.squared
 
-# improvement of 0.30 or 600% 
-
-
-y_hat <- predict(step_mod.wls,newdata = test)
+#RMSE for step_mod
+y_hat <- predict(step_mod,newdata = test)
 residuals <- (test$summedRevenue_log - y_hat)
-# 
 RMSE <- sqrt(mean(residuals^2))
 RMSE
 
-# library(forecast)
-# cor(residuals(step_mod)[-1], residuals(step_mod)[-length(residuals(step_mod))])
-# checkresiduals(step_mod)
-# 
-# cor(residuals(step_mod.wls)[-1], residuals(step_mod)[-length(residuals(step_mod.wls))])
-# checkresiduals(step_mod.wls)
+#RMSE for step_mod.wls 
+y_hat <- predict(step_mod.wls,newdata = test)
+residuals <- (test$summedRevenue_log - y_hat)
+RMSE <- sqrt(mean(residuals^2))
+RMSE
 ```
+
+The weighted least squares step model seems to have a better R^2 value of 0.14 compared to the regualr step model's 0.12. Additionally the RMSE for the weighted least squares model is slightly less than the regular step model's rmse as well, 1.150 < 1.153.
+
+Let us try leave one out cross validation, k-fold cross validation and anova to check for comparing our two mdoels and also checking for overfitting. 
+
+
+# Comparing Final two models
+## 10-fold Cross Validation
 ```{r}
+library(ggplot2)
 
+#Create vectors to stroe CV predcition errors
+error_model_step <- rep(NA, 10)
+error_model_step_wls <- rep(NA, 10)
 
-error_model_step <- rep(NA, 100)
-error_model_step_wls <- rep(NA, 100)
-
-for(i in 1:100){
+for(i in 1:10){
    
-   dt = sort(sample(nrow(data), nrow(data)*.75))
+   #Let us split the data between train and test.
+   #70% will be used to train and 30% will be used to test. 
+   dt = sort(sample(nrow(data), nrow(data)*.70))
    train<-data[dt,]
    test<-data[-dt,]
    
-   step_mod = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-   totals.hits, data = train)
+   step_mod = lm(summedRevenue_log~factor(device.browser) + factor(device.operatingSystem) + 
+   + totals.hits, data = train)
    
    y_hat <- predict(step_mod,newdata = test)
    residuals <- (test$summedRevenue_log - y_hat)
@@ -217,15 +213,15 @@ for(i in 1:100){
    
    
    resids <- step_mod$residuals
-   varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-   totals.hits, data = train)
+   varfunc.step_mod <- lm(abs(resids)~factor(device.browser) + factor(device.operatingSystem) + 
+     + totals.hits, data = train)
 
    
    weightz <- 1/((varfunc.step_mod$fitted.values)^2)
    
 
-   step_mod.wls = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-   totals.hits, weights = weightz, data = train)
+   step_mod.wls = lm(summedRevenue_log~factor(device.browser) + factor(device.operatingSystem) + 
+   + totals.hits, weights = weightz, data = train)
    
    
    y_hat <- predict(step_mod.wls,newdata = test)
@@ -239,11 +235,10 @@ mean(error_model_step_wls)
 ```
 
 
+The low CV prediction errors confirm that neither of our models are overfitting as they can predict well on data the models have not been trained on. That being said, the regular step model seems to perform better than the WLS model as 1.64 < 1.67. Let's try Leave one out cross validation or PRESS to further test whether the regular step model is superior. 
 
 
-
-
-
+## Leave one out Cross Validation
 ```{r}
 
 # create vectors to store the validation errors for each model
@@ -260,21 +255,19 @@ for(i in 1:1335){
   # store the remaining as the 'training' data
   train <- data[-c(i),]
   
-  step_mod = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-   totals.hits, data = train)
+  step_mod = lm(summedRevenue_log~factor(device.browser) + factor(device.operatingSystem) + totals.hits, data = train)
   
   y_hat <- predict(step_mod,newdata = test)
   residuals <- (test$summedRevenue_log - y_hat)
   error_model_step[i] <- sqrt(mean(residuals^2))
   
   resids <- step_mod$residuals
-  varfunc.step_mod <- lm(abs(resids)~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-   totals.hits, data = train)
+  varfunc.step_mod <- lm(abs(resids)~factor(device.browser) + factor(device.operatingSystem) + totals.hits, data = train)
   
   weightz <- 1/((varfunc.step_mod$fitted.values)^2)
   
-  step_mod.wls = lm(summedRevenue_log~factor(device.operatingSystem) + factor(device.deviceCategory) + 
-   totals.hits, weights = weightz, data = train)
+  step_mod.wls = lm(summedRevenue_log~factor(device.browser) + factor(device.operatingSystem) + 
+    + totals.hits, weights = weightz, data = train)
   
   y_hat <- predict(step_mod.wls,newdata = test)
   residuals <- (test$summedRevenue_log - y_hat)
@@ -289,4 +282,17 @@ for(i in 1:1335){
 mean(error_model_step)
 mean(error_model_step_wls)
 ```
+
+
+The LOOCV validation prediction error demonstrates that the WLS model is superior. However, LOOCV has a high variability as only one-observation validation-set is used for prediction. This makes the models generated prone to over fitting. As such we will proceed with the results of K-fold CV and **conclude that the regular step_model is our final selection.**
+
+
+Now that we have selected our model let's test for some assumptions. Let us start off with multicollinearity. We will use the variance inflation factor or VIF to test this. 
+```{r}
+vif(step_mod)
+```
+
+Since our VIF scores are quite low for all of our variables we can conclude that no multicollinearity is present. 
+
+**INSERT CHECKING ASSUMPTIONS CODE HERE**
 
