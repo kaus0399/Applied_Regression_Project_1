@@ -1,0 +1,236 @@
+---
+title: "Project 1 Interaction Effects"
+author: ""
+date: "10/19/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+urlfile <- "https://raw.githubusercontent.com/kaus0399/Applied_Regression_Project_1/main/final_data.csv?token=AOLVKLJMFIULMFDOWJPFISDBQGPXM"
+train <- read_csv(url(urlfile))
+```
+
+
+```{r}
+table_and_int_plot <- function(x, y) {
+  freq_table <- table(x, y)
+  print(freq_table)
+  interaction.plot(x, y, train$summedRevenue_log, col = 1:15)
+}
+
+```
+
+
+```{r}
+table_and_int_plot(train$channelGrouping, train$device.browser)
+```
+
+```{r}
+model1 <- aov(summedRevenue_log ~ channelGrouping * device.browser, data = train)
+summary(model1)
+```
+
+
+```{r}
+table_and_int_plot(train$channelGrouping, train$device.operatingSystem)
+```
+```{r}
+model2 <- aov(summedRevenue_log ~ channelGrouping * device.operatingSystem, data = train)
+summary(model2)
+```
+
+```{r}
+table_and_int_plot(train$channelGrouping, train$device.deviceCategory)
+```
+```{r}
+model3 <- aov(summedRevenue_log ~ channelGrouping * device.deviceCategory, data = train)
+summary(model3)
+```
+
+```{r}
+table_and_int_plot(train$channelGrouping, train$geoNetwork.continent)
+```
+```{r}
+model4 <- aov(summedRevenue_log ~ channelGrouping * geoNetwork.continent, data = train)
+summary(model4)
+```
+
+```{r}
+table_and_int_plot(train$device.browser, train$device.operatingSystem)
+```
+```{r}
+model5 <- aov(summedRevenue_log ~ device.browser * device.operatingSystem, data = train)
+summary(model5)
+```
+
+```{r}
+table_and_int_plot(train$device.browser, train$device.deviceCategory)
+```
+```{r}
+model6 <- aov(summedRevenue_log ~ device.browser * device.deviceCategory, data = train)
+summary(model6)
+```
+
+```{r}
+table_and_int_plot(train$device.browser, train$geoNetwork.continent)
+```
+```{r}
+model7 <- aov(summedRevenue_log ~ device.browser * geoNetwork.continent, data = train)
+summary(model7)
+```
+
+```{r}
+table_and_int_plot(train$device.browser, train$trafficSource.source)
+```
+```{r}
+model8 <- aov(summedRevenue_log ~ device.browser * trafficSource.source, data = train)
+summary(model8)
+```
+           
+```{r}
+table_and_int_plot(train$device.browser, train$trafficSource.medium)
+```
+```{r}
+model9 <- aov(summedRevenue_log ~ device.browser * trafficSource.medium, data = train)
+summary(model9)
+```
+
+```{r}
+table_and_int_plot(train$device.browser, train$gni_cat)
+```
+```{r}
+model10 <- aov(summedRevenue_log ~ device.browser * gni_cat, data = train)
+summary(model10)
+```
+
+```{r}
+table_and_int_plot(train$device.operatingSystem, train$trafficSource.source)
+```
+```{r}
+model11 <- aov(summedRevenue_log ~ device.operatingSystem * trafficSource.source, data = train)
+summary(model11)
+```
+
+```{r}
+table_and_int_plot(train$device.operatingSystem, train$trafficSource.medium)
+```
+```{r}
+model12 <- aov(summedRevenue_log ~ device.operatingSystem * trafficSource.medium, data = train)
+summary(model12)
+```
+
+```{r}
+table_and_int_plot(train$device.deviceCategory, train$geoNetwork.continent)
+```
+```{r}
+model13 <- aov(summedRevenue_log ~ device.deviceCategory * geoNetwork.continent, data = train)
+summary(model13)
+```
+
+```{r}
+table_and_int_plot(train$device.deviceCategory, train$trafficSource.source)
+```
+```{r}
+model14 <- aov(summedRevenue_log ~ device.deviceCategory * trafficSource.source, data = train)
+summary(model14)
+```
+
+```{r}
+table_and_int_plot(train$device.deviceCategory, train$trafficSource.medium)
+```
+```{r}
+model15 <- aov(summedRevenue_log ~ device.deviceCategory * trafficSource.medium, data = train)
+summary(model15)
+```
+
+```{r}
+table_and_int_plot(train$geoNetwork.continent, train$trafficSource.source)
+```
+```{r}
+model16 <- aov(summedRevenue_log ~ geoNetwork.continent * trafficSource.source, data = train)
+summary(model16)
+```
+
+```{r}
+table_and_int_plot(train$geoNetwork.continent, train$trafficSource.medium)
+```
+```{r}
+model17 <- aov(summedRevenue_log ~ geoNetwork.continent * trafficSource.medium, data = train)
+summary(model17)
+```
+
+```{r}
+table_and_int_plot(train$trafficSource.source, train$gni_cat)
+```
+```{r}
+model18 <- aov(summedRevenue_log ~ trafficSource.source * gni_cat, data = train)
+summary(model18)
+```
+
+```{r}
+table_and_int_plot(train$trafficSource.medium, train$gni_cat)
+```
+```{r}
+model19 <- aov(summedRevenue_log ~ trafficSource.medium * gni_cat, data = train)
+summary(model19)
+```
+
+```{r}
+library(car)
+library(effects)
+```
+
+
+```{r}
+lm1 <- lm(summedRevenue_log ~ device.browser * totals.hits, data = train)
+summary(lm1)
+plot(allEffects(lm1))
+```
+```{r}
+lm2 <- lm(summedRevenue_log ~ device.browser * totals.pageviews, data = train)
+summary(lm2)
+plot(allEffects(lm2))
+```
+
+```{r}
+lm3 <- lm(summedRevenue_log ~ device.browser * gni2017, data = train)
+summary(lm3)
+plot(allEffects(lm3))
+```
+```{r}
+lm4 <- lm(summedRevenue_log ~ device.deviceCategory * totals.hits, data = train)
+summary(lm4)
+plot(allEffects(lm4))
+```
+```{r}
+lm5 <- lm(summedRevenue_log ~ device.deviceCategory * totals.pageviews, data = train)
+summary(lm5)
+plot(allEffects(lm5))
+```
+```{r}
+lm6 <- lm(summedRevenue_log ~ geoNetwork.continent * totals.hits, data = train)
+summary(lm6)
+plot(allEffects(lm6))
+```
+```{r}
+lm7 <- lm(summedRevenue_log ~ geoNetwork.continent * totals.pageviews, data = train)
+summary(lm7)
+plot(allEffects(lm7))
+```
+
+```{r}
+lm8 <- lm(summedRevenue_log ~ trafficSource.source * totals.hits, data = train)
+summary(lm8)
+plot(allEffects(lm8))
+```
+
+```{r}
+lm9 <- lm(summedRevenue_log ~ trafficSource.source * totals.pageviews, data = train)
+summary(lm9)
+plot(allEffects(lm9))
+```
